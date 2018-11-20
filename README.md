@@ -1,5 +1,5 @@
 # cluster-se
-approach to elegantly compute cluster robust standard errors in two-sample-2-stage-least-square. Adaption/extension of the code for  hetereskedasticity robust standard errors as provided by
+approach to elegantly compute cluster robust standard errors in two-sample-2-stage-least-square using STATA. Adaption/extension of the code for  hetereskedasticity robust standard errors as provided by
 
 Robust inference for the Two-Sample 2SLS estimator,
 Economics Letters,
