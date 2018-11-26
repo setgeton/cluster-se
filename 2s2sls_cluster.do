@@ -1,35 +1,21 @@
-
 vers 14.0
 
 clear
 set more off
 
-if c(username) == "elvis" {
-global PROJ_DIR "C:\Users\elvis\2s2sls\"
-}
+set seed 13452
 
-global SYNTH_DIR "${PROJ_DIR}\synth\"
-global LOG_DIR "${PROJ_DIR}\Log\"
-
-cd "${SYNTH_DIR}"
-
-capture log close
-capture log using "${LOG_DIR}montecarlo-cluster.log", replace
-
-
-set seed 12152
-
-*save resstore.dta, emptyok replace
+save results.dta, emptyok replace
 
 drop _all
 
 display "Start: $S_TIME  $S_DATE"
 
-loc numiter = 1000
-local nobs = 400
-loc exp = 4 // create x obs per observation--> introduced cluster dependency
+loc numiter = 10000
+local nobs = 200
+loc exp = 10 // create x obs per observation--> introduce cluster dependency
 loc het = 1 // insert heteroskedasticity (1/0)
-loc clu = 2 // insert cluster variance
+loc clu = 1 // insert cluster variance
 
 quietly {
 
@@ -44,18 +30,19 @@ gen id=_n //Create ID numbers
 
 
 * unobservables, indep over individ
-scalar define sigma_a = 1
-bys id: gen alpha1 = sigma_a*invnormal(uniform())
-bys id: gen alpha2 = sigma_a*invnormal(uniform())
-bys id: gen alpha3 = sigma_a*invnormal(uniform())
+loc rhoA=0.3
+loc rhoB=-0.2
+matrix covmat=(1 , `rhoA', `rhoB' \ `rhoA',1,`rhoA'*`rhoB' \ `rhoB', `rhoA'*`rhoB',1)
+drawnorm alpha1 alpha2 alpha3, cov(covmat)
+
+
+
 
 * generate explanatory vars, individual specific
-gen w=0+3 * uniform() 
+gen w=0+1 * uniform() 
 gen z1=0+1 * uniform()
 gen z2=0+1 * uniform() 
 gen z3=0+1 * uniform()  
-gen x1_0 =1 * uniform()
-gen x2_0 =1 * uniform()
 
 * expand in dimension t
 expand `exp'
@@ -68,36 +55,44 @@ replace w = w + sigma_expl_noise * invnormal(uniform())
 replace z1 = z1 + sigma_expl_noise * invnormal(uniform())
 replace z2 = z2 + sigma_expl_noise * invnormal(uniform())
 replace z3 = z3 + sigma_expl_noise * invnormal(uniform())
-replace x1_0 = x1_0 + sigma_expl_noise * invnormal(uniform()) //part of x1 not explained through instruments
-replace x2_0 = x2_0 + sigma_expl_noise * invnormal(uniform()) //part of x2 not explained through instruments
 
 
-scalar define beta0 = -2
-scalar define beta1 = 2
-scalar define beta2 = 2
-scalar define betaw = 3.0
+scalar define beta0 = 0
+scalar define beta1 = 0.9
+scalar define beta2 = -0.6
+scalar define betawx1 = 0.2
+scalar define betawx2 = 0.4
+scalar define betawy = 0.2
 
-* unobservables, indep over observ and time, 
-gen u1 = 1 * invnorm(uniform()) //stand norm distr, sd=1
-gen u2 = 1 * invnorm(uniform()) //stand norm distr, sd=1
-gen u3 = 1 * invnorm(uniform()) //stand norm distr, sd=1
+* unobservables, indep over observ and time 
+loc rho1=`rhoA'
+loc rho2=`rhoB'
+matrix covmat=(1 , `rho1', `rho2' \ `rho1',1,`rho1'*`rho2' \ `rho2', `rho1'*`rho2',1)
+drawnorm u1 u2 u3, cov(covmat)
+
+
 
 loc hetg1=0+`het'*1
-loc hetg2=0+`het'*1
-loc hetg3=0+`het'*-1
-loc hetgy1=0+`het'*1.5
-loc hetgy3=0+`het'*(-0.5)
+loc hetg2=0+`het'*-1
+loc hetg3=0+`het'*0.5
+loc hetgc1=0+`het'*1
+loc hetgc2=0+`het'*0.5
+loc hetgc3=0+`het'*1
+loc clu1=`clu'*1
+loc clu2=`clu'*1
+loc clu3=`clu'*1
 *****generate x1, x2 and y
-gen x1= 0.92*z1 - 1.82*z2 + 1.41*z3+ x1_0 + sqrt(exp(`hetg2'*z2))*u1 + `clu'*sqrt(exp(`hetg3'*z3))*alpha1
-gen x2= 0.53*z1 - 3.44*z2 - 0.95*z3 + x2_0 + sqrt(exp(`hetg1'*z1))*u2 + `clu'*sqrt(exp(`hetg2'*z2))*alpha2
-gen y = x1*beta1 + x2*beta2 + w*betaw + beta0 + sqrt(exp(`hetgy1'*z1))*u3 + `clu'*sqrt(exp(`hetgy3'*z3))*alpha3
+gen x1= -0.6*z1 - 1.60*z2 + 1.60*z3 +w*betawx1 + sqrt(exp(`hetg3'*z3+`hetg2'*z2+`hetg1'*z1))*u1 + `clu1'*sqrt(exp(`hetgc3'*z3+`hetgc2'*z2+`hetgc1'*z1))*alpha1
+gen x2= 0.5*z1 - 0.50*z2 - 1.80*z3 +w*betawx2 + sqrt(exp(`hetg3'*z3+`hetg2'*z2+`hetg1'*z1))*u2 + `clu2'*sqrt(exp(`hetgc3'*z3+`hetgc2'*z2+`hetgc1'*z1))*alpha2
+gen y = x1*beta1 + x2*beta2 + w*betawy + beta0 + sqrt(exp(`hetg3'*z3+`hetg2'*z2+`hetg1'*z1))*u3 + `clu3'*sqrt(exp(`hetgc3'*z3+`hetgc2'*z2+`hetgc1'*z1))*alpha3
 
 
 
 ***SAVE SAMPLE1
 preserve  
 keep y w z1 z2 z3 id
-keep if id<`nobs'/3
+keep if id<`nobs'*0.4
+sleep 200
 save sample1.dta, replace //2stage data set
 restore
 
@@ -105,7 +100,8 @@ restore
 ***SAVE SAMPLE2
 preserve
 keep x1 x2 w z1 z2 z3 id
-keep if id>=`nobs'/3
+keep if id>=`nobs'*0.6
+sleep 200
 save sample2.dta, replace //1stage data set
 restore
 
@@ -158,7 +154,7 @@ di e(N_clust)
 di e(N)
 matlist e(V)
 /*without degrees of freedom correction*/
-qui reg y z1 z2 z3 w, rob
+reg y z1 z2 z3 w, rob
 mat Vy1het = e(V)*e(df_r)/e(N) /*Robust variance estimate of piy1,*/
 di e(df_r)
 di e(df_m) 
@@ -166,13 +162,14 @@ di e(N_clust)
 di e(N)
 matlist e(V)
 /*without degrees of freedom correction*/
-qui reg y z1 z2 z3 w, cluster(id)
-mat Vy1clu = e(V)*((e(df_r)-e(df_m))/e(df_r))*(e(N)-e(df_m))/e(N) /*Cluster-Robust variance estimate of piy1,*/
+reg y z1 z2 z3 w, cluster(id)
 di e(df_r)
 di e(df_m) 
 di e(N_clust)
 di e(N)
+mat Vy1clu = e(V)*(e(df_r)/(e(df_r)+1)) // linreg correction: e(V)*((e(df_r)-e(df_m))/e(df_r))*(e(N)-e(df_m))/e(N) /*Cluster-Robust variance estimate of piy1,*/
 matlist e(V)
+
 /*without degrees of freedom correction*/
 
 /*TS2SLS estimator*/
@@ -220,16 +217,34 @@ gen seclu3=seb2sclu[3,1]
 gen iter=`mciter'
 keep if _n==1
 keep b1-seclu3 iter
-   append using resstore.dta
-save resstore.dta, replace
+sleep 200
+   append using results.dta
+sleep 200
+save results.dta, replace
 drop _all
 }
 
+ } //quietly
+sleep 200
 
-use resstore.dta, clear
+**** ORGANIZE RESULTS/ COMPUTE STD DEV AND MEANS
+use results.dta, clear
 
-mat t1=J(3,5,.) //Defining empty matrix
-mat colnames t1 = "bhat_ts2sls" "stddev" "hom-se" "rob-se" "cluster-se"
+gen waldhom1=abs(b1-beta1)/sehom1>1.96
+gen waldhom2=abs(b2-beta2)/sehom2>1.96
+gen waldhom3=abs(bw-betawy)/sehom3>1.96
+
+gen waldhet1=abs(b1-beta1)/sehet1>1.96
+gen waldhet2=abs(b2-beta2)/sehet2>1.96
+gen waldhet3=abs(bw-betawy)/sehet3>1.96
+
+gen waldclu1=abs(b1-beta1)/seclu1>1.96
+gen waldclu2=abs(b2-beta2)/seclu2>1.96
+gen waldclu3=abs(bw-betawy)/seclu3>1.96
+
+
+mat t1=J(3,8,.) //Defining empty matrix
+mat colnames t1 = "bhat_ts2sls" "stddev" "hom-se" "rob-se" "cluster-se" "Wald-hom" "Wald-rob" "Wald-clu"
 mat rownames t1 = x1 x2 w
 
 	local a=1
@@ -256,16 +271,27 @@ mat rownames t1 = x1 x2 w
 		sum `v', meanonly
 		mat t1[`a',5]=r(mean)
 		loc ++a
-		}		
+		}
+		local a=1
+	foreach v of varlist waldhom* {
+		sum `v', meanonly
+		mat t1[`a',6]=r(mean)
+		loc ++a
+		}
+		local a=1
+	foreach v of varlist waldhet* {
+		sum `v', meanonly
+		mat t1[`a',7]=r(mean)
+		loc ++a
+		}
+		local a=1
+	foreach v of varlist waldclu* {
+		sum `v', meanonly
+		mat t1[`a',8]=r(mean)
+		loc ++a
+		}	
 	
- } //quietly
 
 
+****DISPLAY RESULTS**
 mat li t1
-esttab matrix(t1) using "${SYNTH_DIR}montecarlo_cluster.tex", replace
-
-
-capture log close
-
-
-
