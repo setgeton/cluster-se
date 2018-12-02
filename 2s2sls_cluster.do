@@ -152,25 +152,25 @@ di e(df_r)
 di e(df_m) 
 di e(N_clust)
 di e(N)
-matlist e(V)
-/*without degrees of freedom correction*/
+matlist e(V)  /*with degrees of freedom correction removed again*/
+
 reg y z1 z2 z3 w, rob
 mat Vy1het = e(V)*e(df_r)/e(N) /*Robust variance estimate of piy1,*/
 di e(df_r)
 di e(df_m) 
 di e(N_clust)
 di e(N)
-matlist e(V)
-/*without degrees of freedom correction*/
+matlist e(V) /*with degrees of freedom correction removed again*/
+
 reg y z1 z2 z3 w, cluster(id)
 di e(df_r)
 di e(df_m) 
 di e(N_clust)
 di e(N)
 mat Vy1clu = e(V)*(e(df_r)/(e(df_r)+1)) // linreg correction: e(V)*((e(df_r)-e(df_m))/e(df_r))*(e(N)-e(df_m))/e(N) /*Cluster-Robust variance estimate of piy1,*/
-matlist e(V)
+matlist e(V) /*with degrees of freedom correction removed again*/
 
-/*without degrees of freedom correction*/
+
 
 /*TS2SLS estimator*/
 qui reg y x1h x2h w
